@@ -12,8 +12,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('tasks', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
+        $table->id();
+        $table->string('title');
+        $table->text('description')->nullable();
+        $table->enum('status', ['todo', 'in_progress', 'done'])->default('todo');
+        $table->foreignId('project_id')->constrained()->onDelete('cascade');
+        $table->unsignedBigInteger('assigned_to')->nullable();
+        $table->foreign('assigned_to')->references('id')->on('users')->onDelete('set null');
+        $table->timestamps();
         });
     }
 
