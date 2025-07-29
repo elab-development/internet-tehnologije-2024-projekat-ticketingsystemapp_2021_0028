@@ -17,7 +17,10 @@ class TimeEntryFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'user_id' => \App\Models\User::factory(),
+            'task_id' => \App\Models\Task::factory(),
+            'hours' => $this->faker->numberBetween(1, 8),
+            'work_date' => $this->faker->date(),
         ];
     }
 }

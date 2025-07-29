@@ -16,8 +16,16 @@ class EventFactory extends Factory
      */
     public function definition(): array
     {
+        $start = $this->faker->dateTimeBetween('now', '+1 week');
+        $end = (clone $start)->modify('+2 hours');
+        
         return [
-            //
+            'user_id' => \App\Models\User::factory(),
+            'project_id' => \App\Models\Project::factory(),
+            'title' => $this->faker->sentence(3),
+            'description' => $this->faker->paragraph(),
+            'start_time' => $start,
+            'end_time' => $end,
         ];
     }
 }

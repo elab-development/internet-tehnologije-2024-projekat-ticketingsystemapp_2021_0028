@@ -17,7 +17,11 @@ class MessageFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'sender_id' => \App\Models\User::factory(),
+            'receiver_id' => \App\Models\User::factory(),
+            'content' => $this->faker->sentence(),
+            'sent_at' => now(),
+            'read_at' => null,
         ];
     }
 }
