@@ -19,6 +19,7 @@ class ProjectFactory extends Factory
         return [
             'name' => $this->faker->words(3, true),
             'description' => $this->faker->sentence(10),
+            'created_by' => \App\Models\User::factory(),
         ];
     }
 }
