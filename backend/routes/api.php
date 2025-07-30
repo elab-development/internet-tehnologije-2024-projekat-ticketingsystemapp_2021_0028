@@ -19,3 +19,16 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 });
+
+Route::middleware(['auth:sanctum', 'admin'])->get('/admin-only', function () {
+    return response()->json(['message' => 'Hello Admin']);
+});
+
+Route::middleware(['auth:sanctum', 'manager'])->get('/manager-only', function () {
+    return response()->json(['message' => 'Hello Manager']);
+});
+
+Route::middleware(['auth:sanctum', 'employee'])->get('/employee-only', function () {
+    return response()->json(['message' => 'Hello Employee']);
+});
+
