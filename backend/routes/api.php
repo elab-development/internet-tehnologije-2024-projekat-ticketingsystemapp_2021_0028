@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
+use App\Http\Controllers\ProjectController;
 
 
 Route::get('/test', function () {
@@ -30,5 +31,9 @@ Route::middleware(['auth:sanctum', 'manager'])->get('/manager-only', function ()
 
 Route::middleware(['auth:sanctum', 'employee'])->get('/employee-only', function () {
     return response()->json(['message' => 'Hello Employee']);
+});
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::apiResource('projects', ProjectController::class);
 });
 
