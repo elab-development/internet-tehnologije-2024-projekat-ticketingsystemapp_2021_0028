@@ -20,7 +20,7 @@ class ProjectController extends Controller
             return Project::with('users')->where('created_by', $user->id)->get();
         }
 
-        return $user->projects()->with('users')->get();
+        return $user->projects->load('users');
     }
 
     public function store(Request $request)
