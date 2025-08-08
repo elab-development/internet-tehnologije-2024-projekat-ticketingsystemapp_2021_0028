@@ -11,6 +11,8 @@ use App\Http\Controllers\MessageController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\TaskExportController;
 use App\Http\Controllers\MotivationController;
+use App\Http\Controllers\StatisticsController;
+use App\Http\Controllers\ReportController;
 
 
 
@@ -64,6 +66,11 @@ Route::apiResource('events', EventController::class)->middleware('auth:sanctum')
 Route::get('/tasks/export', [TaskExportController::class, 'export'])->middleware('auth:sanctum');
 
 Route::get('/motivation', [MotivationController::class, 'index']);
+
+Route::get('/statistics', [StatisticsController::class, 'index']);
+
+Route::get('/report/hours', [ReportController::class, 'userWorkHours']);
+
 
 
 
