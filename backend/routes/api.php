@@ -9,6 +9,9 @@ use App\Http\Controllers\TimeEntryController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\TaskExportController;
+use App\Http\Controllers\MotivationController;
+
 
 
 Route::get('/test', function () {
@@ -57,5 +60,11 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::apiResource('events', EventController::class)->middleware('auth:sanctum');
+
+Route::get('/tasks/export', [TaskExportController::class, 'export'])->middleware('auth:sanctum');
+
+Route::get('/motivation', [MotivationController::class, 'index']);
+
+
 
 
