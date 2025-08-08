@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TimeEntryController;
+use App\Http\Controllers\CommentController;
 
 
 Route::get('/test', function () {
@@ -44,3 +45,5 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::apiResource('time-entries', TimeEntryController::class)->middleware('auth:sanctum');
+
+Route::apiResource('comments', CommentController::class)->middleware('auth:sanctum');
