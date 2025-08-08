@@ -9,29 +9,36 @@ use Illuminate\Support\Facades\Auth;
 
 class TaskController extends Controller
 {
-    // GET /api/tasks
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
 
-        if ($user->role === 'admin') {
-            return Task::with('project', 'user')->get();
-        }
+        $query = Task::with('project', 'user');
 
         if ($user->role === 'manager') {
-            return Task::with('project', 'user')
-                ->whereHas('project', function ($q) use ($user) {
-                    $q->where('created_by', $user->id);
-                })->get();
+            $query->whereHas('project', function ($q) use ($user) {
+                $q->where('created_by', $user->id);
+            });
+        } elseif ($user->role === 'employee') {
+            $query->where('assigned_to', $user->id);
         }
 
-        // employee
-        return Task::with('project', 'user')
-            ->where('assigned_to', $user->id)
-            ->get();
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('search')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('title', 'like', '%' . $request->search . '%')
+                  ->orWhere('description', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        $perPage = $request->input('per_page', 10);
+        return $query->paginate($perPage);
     }
 
-    // POST /api/tasks
+
     public function store(Request $request)
     {
         $user = Auth::user();
@@ -48,7 +55,6 @@ class TaskController extends Controller
             'status' => 'nullable|string|in:todo,in_progress,done',
         ]);
 
-        // Manager može dodavati taskove samo u svoje projekte
         if (
             $user->role === 'manager' &&
             Project::find($validated['project_id'])->created_by !== $user->id
@@ -61,7 +67,6 @@ class TaskController extends Controller
         return response()->json($task, 201);
     }
 
-    // GET /api/tasks/{id}
     public function show($id)
     {
         $task = Task::with('project', 'user')->findOrFail($id);
@@ -88,7 +93,6 @@ class TaskController extends Controller
         return response()->json(['error' => 'Unauthorized'], 403);
     }
 
-    // PUT /api/tasks/{id}
     public function update(Request $request, $id)
     {
         $task = Task::findOrFail($id);
@@ -101,13 +105,11 @@ class TaskController extends Controller
             'status' => 'nullable|string|in:todo,in_progress,done',
         ]);
 
-        // Admin i manager mogu sve
         if ($user->role === 'admin' || ($user->role === 'manager' && $task->project->created_by === $user->id)) {
             $task->update($validated);
             return response()->json($task);
         }
 
-        // Employee može menjati samo status
         if (
             $user->role === 'employee' &&
             $task->assigned_to === $user->id &&
@@ -121,7 +123,6 @@ class TaskController extends Controller
         return response()->json(['error' => 'Unauthorized'], 403);
     }
 
-    // DELETE /api/tasks/{id}
     public function destroy($id)
     {
         $task = Task::findOrFail($id);
