@@ -8,6 +8,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TimeEntryController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\EventController;
 
 
 Route::get('/test', function () {
@@ -54,4 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
         'index', 'store', 'show', 'destroy'
     ]);
 });
+
+Route::apiResource('events', EventController::class)->middleware('auth:sanctum');
+
 
