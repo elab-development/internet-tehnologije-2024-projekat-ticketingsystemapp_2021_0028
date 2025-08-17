@@ -21,6 +21,7 @@ export default function App() {
 
             <Route element={<ProtectedRoute/>}>
               <Route path="/dashboard" element={<Dashboard/>} />
+              {/* sledeće: /projects, /tasks, /messages ... */}
             </Route>
 
             <Route path="*" element={<div className="container py-4"><div className="alert alert-warning">Not found</div></div>} />
