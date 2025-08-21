@@ -7,6 +7,9 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import ProjectsPage from './pages/ProjectsPage';
+import ProjectDetailsPage from './pages/ProjectDetailsPage';
+ 
 
 export default function App() {
   return (
@@ -21,6 +24,8 @@ export default function App() {
 
             <Route element={<ProtectedRoute/>}>
               <Route path="/dashboard" element={<Dashboard/>} />
+              <Route path="/projects" element={<ProjectsPage/>} />
+              <Route path="/projects/:id" element={<ProjectDetailsPage/>} />
               {/* sledeće: /projects, /tasks, /messages ... */}
             </Route>
 

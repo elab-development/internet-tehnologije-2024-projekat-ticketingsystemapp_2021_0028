@@ -82,7 +82,7 @@ export default function Dashboard() {
               Quick overview of your projects, tasks and upcoming events.
             </p>
           </div>
-        </div>
+        </div>  
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

@@ -33,3 +33,16 @@ body {
 .link-muted:hover {
   color: #0ea5e9;
 }
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.break-word {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
