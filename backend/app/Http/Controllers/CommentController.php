@@ -3,16 +3,32 @@
 namespace App\Http\Controllers;
 
 use App\Models\Comment;
-use App\Models\Task;
+use App\Models\Task; // CHANGE
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class CommentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
 
+        // CHANGE: ako se traže komentari za konkretan task
+        if ($request->filled('task_id')) { // CHANGE
+            $task = Task::with('project')->findOrFail($request->task_id); // CHANGE
+
+            // dozvole – kao i za show Task
+            if (
+                $user->role === 'admin' ||
+                ($user->role === 'manager' && $task->project && $task->project->created_by === $user->id) ||
+                ($user->role === 'employee' && $task->assigned_to === $user->id)
+            ) {
+                return Comment::with('user')->where('task_id', $task->id)->orderBy('created_at','desc')->get(); // CHANGE
+            }
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // originalno ponašanje (po korisniku)
         if ($user->role === 'admin') {
             return Comment::with('task', 'user')->get();
         }

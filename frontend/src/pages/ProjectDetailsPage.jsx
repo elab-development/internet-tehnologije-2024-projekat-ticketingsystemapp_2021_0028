@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
+import TaskModal from "../components/TaskModal"; // CHANGE
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -24,6 +25,7 @@ export default function ProjectDetailsPage() {
   const [tasksLoading, setTasksLoading] = useState(true);
   const [taskErr, setTaskErr] = useState("");
   const [taskFilter, setTaskFilter] = useState({ q: "", status: "" });
+  const [openTaskId, setOpenTaskId] = useState(null); // CHANGE
 
   // create task
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -37,6 +39,14 @@ export default function ProjectDetailsPage() {
   const [picked, setPicked] = useState([]);
   const [busyAttach, setBusyAttach] = useState(false);
   const [userQuery, setUserQuery] = useState("");
+
+  // events
+  const [events, setEvents] = useState([]);           // CHANGE
+  const [eventsLoading, setEventsLoading] = useState(true); // CHANGE
+  const [eventErr, setEventErr] = useState("");       // CHANGE
+  const [showCreateEvent, setShowCreateEvent] = useState(false); // CHANGE
+  const [newEvent, setNewEvent] = useState({ title: "", description: "", start_time: "", end_time: "" }); // CHANGE
+  const [creatingEvent, setCreatingEvent] = useState(false); // CHANGE
 
   const canManage = useMemo(() => {
     if (!user || !project) return false;
@@ -63,33 +73,43 @@ export default function ProjectDetailsPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // LOAD TASKS (prefer server filter ?project_id=; fallback: client filter)
+  // LOAD TASKS
   useEffect(() => {
-    let cancelled = false;
-    const loadTasks = async () => {
-      setTasksLoading(true); setTaskErr("");
+  let cancelled = false;
+  const loadTasks = async () => {
+    setTasksLoading(true); setTaskErr("");
+    try {
+      const res = await api.get("/tasks", { params: { project_id: id, per_page: 100 } }); // MARK: CHANGED
+      const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      if (!cancelled) setTasks(items);
+    } catch (e) {
+      if (!cancelled) setTaskErr(e?.response?.data?.message || "Failed to load tasks.");
+    } finally {
+      if (!cancelled) setTasksLoading(false);
+    }
+  };
+  loadTasks();
+  return () => { cancelled = true; };
+}, [id]);
+
+  // LOAD EVENTS
+  useEffect(() => {
+    let cancel = false;
+    const loadEv = async () => {
+      setEventsLoading(true); setEventErr("");
       try {
-        // prvo pokušaj server-side filter
-        let res;
-        try {
-          res = await api.get("/tasks", { params: { project_id: id, per_page: 100 } });
-          const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-          if (!cancelled) setTasks(items);
-        } catch {
-          // fallback: povuci deo taskova i filtriraj klijentski
-          const r2 = await api.get("/tasks", { params: { per_page: 100 } });
-          const all = Array.isArray(r2.data) ? r2.data : (r2.data?.data || []);
-          const filtered = all.filter(t => String(t.project_id) === String(id));
-          if (!cancelled) setTasks(filtered);
-        }
+        const res = await api.get("/events");
+        const all = Array.isArray(res.data) ? res.data : [];
+        const list = all.filter(e => String(e.project_id || "") === String(id));
+        if (!cancel) setEvents(list.sort((a,b)=> new Date(a.start_time)-new Date(b.start_time)));
       } catch (e) {
-        if (!cancelled) setTaskErr(e?.response?.data?.message || "Failed to load tasks.");
+        if (!cancel) setEventErr(e?.response?.data?.message || "Failed to load events.");
       } finally {
-        if (!cancelled) setTasksLoading(false);
+        if (!cancel) setEventsLoading(false);
       }
     };
-    loadTasks();
-    return () => { cancelled = true; };
+    loadEv();
+    return () => { cancel = true; };
   }, [id]);
 
   // FILTERED TASKS
@@ -132,8 +152,8 @@ export default function ProjectDetailsPage() {
     );
   }, [allUsers, userQuery]);
 
-  const togglePick = (id) => {
-    setPicked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const togglePick = (uid) => {
+    setPicked(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid]);
   };
 
   const attachMembers = async () => {
@@ -156,29 +176,58 @@ export default function ProjectDetailsPage() {
   // CREATE TASK (admin/manager)
   const canCreateTask = canManage;
   const submitCreateTask = async (e) => {
+  e?.preventDefault?.();
+  if (!project) return;
+  setCreating(true);
+  try {
+    const payload = {
+      project_id: Number(project.id),
+      title: newTask.title,
+      description: newTask.description || "",
+      assigned_to: newTask.assigned_to ? Number(newTask.assigned_to) : null,
+      status: "todo",
+    };
+    const { data } = await api.post("/tasks", payload);
+    // data već ima .user i .project
+    if (String(data.project_id) === String(project.id)) {
+      setTasks(prev => [data, ...prev]);
+    }
+    setShowCreateTask(false);
+    setNewTask({ title: "", description: "", assigned_to: "" });
+  } catch (e) {
+    alert(e?.response?.data?.error || e?.response?.data?.message || "Failed to create task.");
+  } finally {
+    setCreating(false);
+  }
+};
+
+
+  // CREATE EVENT (admin/manager)
+  const canCreateEvent = canManage; // CHANGE
+  const submitCreateEvent = async (e) => { // CHANGE
     e?.preventDefault?.();
-    if (!project) return;
-    setCreating(true);
+    setCreatingEvent(true);
     try {
       const payload = {
-        project_id: Number(project.id),
-        title: newTask.title,
-        description: newTask.description || "",
-        assigned_to: newTask.assigned_to ? Number(newTask.assigned_to) : null,
-        status: "todo",
+        project_id: Number(id),
+        title: newEvent.title,
+        description: newEvent.description || "",
+        start_time: newEvent.start_time,
+        end_time: newEvent.end_time,
       };
-      const { data } = await api.post("/tasks", payload);
-      // odmah ubaci u listu ako pripada ovom projektu
-      if (String(data.project_id) === String(project.id)) {
-        setTasks(prev => [data, ...prev]);
-      }
-      setShowCreateTask(false);
-      setNewTask({ title: "", description: "", assigned_to: "" });
+      const { data } = await api.post("/events", payload);
+      setEvents(prev => [...prev, data].sort((a,b)=> new Date(a.start_time)-new Date(b.start_time)));
+      setShowCreateEvent(false);
+      setNewEvent({ title:"", description:"", start_time:"", end_time:"" });
     } catch (e) {
-      alert(e?.response?.data?.error || e?.response?.data?.message || "Failed to create task.");
+      alert(e?.response?.data?.error || e?.response?.data?.message || "Failed to create event");
     } finally {
-      setCreating(false);
+      setCreatingEvent(false);
     }
+  };
+
+  const onTaskUpdated = (updated) => { // CHANGE
+    setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
   };
 
   if (loading) return <div className="container py-4">Loading…</div>;
@@ -188,7 +237,7 @@ export default function ProjectDetailsPage() {
   return (
     <div className="container py-4">
       <div className="row g-4">
-        {/* MAIN: Tasks */}
+        {/* MAIN: Tasks (tabela pregleda taskova) */}
         <div className="col-12 col-lg-8">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h4 className="mb-0">🧩 Tasks</h4>
@@ -218,7 +267,7 @@ export default function ProjectDetailsPage() {
             </select>
           </div>
 
-          {/* Tasks list */}
+          {/* Tasks list (klik na red otvara modal) */}
           {tasksLoading ? (
             <div>Loading tasks…</div>
           ) : taskErr ? (
@@ -235,12 +284,13 @@ export default function ProjectDetailsPage() {
                       <th>Assignee</th>
                       <th>Status</th>
                       <th>Created</th>
+                      <th style={{width: 90}}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredTasks.map(t => (
                       <tr key={t.id}>
-                        <td className="break-word">
+                        <td className="break-word" onClick={()=>setOpenTaskId(t.id)} style={{cursor:"pointer"}}>
                           <div className="fw-semibold">{t.title}</div>
                           <div className="small text-muted line-clamp-2">{t.description || "—"}</div>
                         </td>
@@ -251,6 +301,9 @@ export default function ProjectDetailsPage() {
                           }`}>{t.status}</span>
                         </td>
                         <td className="small text-muted">{t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</td>
+                        <td className="text-end">
+                          <button className="btn btn-sm btn-outline-primary" onClick={()=>setOpenTaskId(t.id)}>Open</button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -260,7 +313,7 @@ export default function ProjectDetailsPage() {
           )}
         </div>
 
-        {/* SIDEBAR: Info + Members */}
+        {/* SIDEBAR: Info + Members + Events */}
         <div className="col-12 col-lg-4">
           {/* Project info */}
           <div className="card shadow-sm border-0 mb-3">
@@ -272,7 +325,7 @@ export default function ProjectDetailsPage() {
           </div>
 
           {/* Members */}
-          <div className="card shadow-sm border-0">
+          <div className="card shadow-sm border-0 mb-3">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <h5 className="card-title mb-0">👥 Members</h5>
@@ -300,6 +353,36 @@ export default function ProjectDetailsPage() {
                 <button className="btn btn-outline-secondary btn-sm mt-3" onClick={openMembers}>
                   Add members
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* Events */}
+          <div className="card shadow-sm border-0">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5 className="card-title mb-0">🗓️ Events</h5>
+                {canCreateEvent && (
+                  <button className="btn btn-sm btn-primary" onClick={()=>setShowCreateEvent(true)}>+ New</button>
+                )}
+              </div>
+              {eventsLoading ? (
+                <div>Loading events…</div>
+              ) : eventErr ? (
+                <div className="alert alert-danger">{eventErr}</div>
+              ) : events.length === 0 ? (
+                <div className="text-muted">No events for this project.</div>
+              ) : (
+                <ul className="list-group list-group-flush">
+                  {events.map(ev => (
+                    <li key={ev.id} className="list-group-item">
+                      <div className="fw-semibold small">{ev.title}</div>
+                      <div className="small text-muted">
+                        {new Date(ev.start_time).toLocaleString()} – {new Date(ev.end_time).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>
@@ -345,9 +428,14 @@ export default function ProjectDetailsPage() {
         </div>
       )}
 
-      {/* Add Members Modal */}
+      {/* ADD: Members Modal */}
       {showMembersModal && (
-        <div className="modal fade show" style={{ display:"block", background:"rgba(0,0,0,0.35)" }} aria-modal="true" role="dialog">
+        <div
+          className="modal fade show"
+          style={{ display: "block", background: "rgba(0,0,0,0.35)" }}
+          aria-modal="true"
+          role="dialog"
+        >
           <div className="modal-dialog modal-dialog-scrollable">
             <div className="modal-content">
               <div className="modal-header">
@@ -359,7 +447,12 @@ export default function ProjectDetailsPage() {
                   <div>Loading users…</div>
                 ) : (
                   <>
-                    <input className="form-control mb-2" placeholder="Search users…" value={userQuery} onChange={(e)=>setUserQuery(e.target.value)} />
+                    <input
+                      className="form-control mb-2"
+                      placeholder="Search users…"
+                      value={userQuery}
+                      onChange={(e)=>setUserQuery(e.target.value)}
+                    />
                     <div className="list-group" style={{ maxHeight: 360, overflowY: "auto" }}>
                       {filteredUsers.map(u => (
                         <label key={u.id} className="list-group-item d-flex align-items-center">
@@ -394,9 +487,53 @@ export default function ProjectDetailsPage() {
           </div>
         </div>
       )}
+      {/* END ADD */}
 
-      {/* backdrops for modals */}
-      {(showCreateTask || showMembersModal) && <div className="modal-backdrop fade show" />}
+      {/* Create Event Modal */}
+      {showCreateEvent && (
+        <div className="modal fade show" style={{ display:"block", background:"rgba(0,0,0,0.35)" }} aria-modal="true" role="dialog">
+          <div className="modal-dialog">
+            <form className="modal-content" onSubmit={submitCreateEvent}>
+              <div className="modal-header">
+                <h5 className="modal-title">New Event</h5>
+                <button type="button" className="btn-close" onClick={()=>setShowCreateEvent(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Title</label>
+                  <input className="form-control" required value={newEvent.title} onChange={(e)=>setNewEvent({...newEvent, title:e.target.value})}/>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Description</label>
+                  <textarea className="form-control" rows={3} value={newEvent.description} onChange={(e)=>setNewEvent({...newEvent, description:e.target.value})}/>
+                </div>
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">Start</label>
+                    <input type="datetime-local" className="form-control" required value={newEvent.start_time} onChange={(e)=>setNewEvent({...newEvent, start_time:e.target.value})}/>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label fw-semibold">End</label>
+                    <input type="datetime-local" className="form-control" required value={newEvent.end_time} onChange={(e)=>setNewEvent({...newEvent, end_time:e.target.value})}/>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline-secondary" onClick={()=>setShowCreateEvent(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={creatingEvent}>
+                  {creatingEvent ? "Creating…" : "Create event"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Backdrops */}
+      {(showCreateTask || showMembersModal || openTaskId || showCreateEvent) && <div className="modal-backdrop fade show" />}
+
+      {/* Task modal */}
+      {openTaskId && <TaskModal taskId={openTaskId} onClose={()=>setOpenTaskId(null)} onUpdated={onTaskUpdated} />}
     </div>
   );
 }

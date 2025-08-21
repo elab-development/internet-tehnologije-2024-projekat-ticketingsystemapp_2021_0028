@@ -12,7 +12,7 @@ export default function ProjectsPage() {
   const [err, setErr] = useState("");
   const [projects, setProjects] = useState([]);
 
-  // Modal state
+  // Members modal (existing)
   const [selectProject, setSelectProject] = useState(null);
   const [usersLoading, setUsersLoading] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
@@ -20,12 +20,23 @@ export default function ProjectsPage() {
   const [busyAttach, setBusyAttach] = useState(false);
   const [userQuery, setUserQuery] = useState("");
 
+  // === CREATE PROJECT modal state ===
+  const [showCreate, setShowCreate] = useState(false);                  // CHANGE
+  const [creating, setCreating] = useState(false);                      // CHANGE
+  const [createErr, setCreateErr] = useState("");                       // CHANGE
+  const [form, setForm] = useState({ name: "", description: "" });      // CHANGE
+  const [createPicked, setCreatePicked] = useState([]);                 // CHANGE
+  const [createUsersLoading, setCreateUsersLoading] = useState(false);  // CHANGE
+  const [createUserQuery, setCreateUserQuery] = useState("");           // CHANGE
+
   const canManageProject = (project) => {
     if (!user) return false;
     if (user.role === "admin") return true;
     if (user.role === "manager" && project.created_by === user.id) return true;
     return false;
   };
+
+  const canCreateProject = user?.role === "admin" || user?.role === "manager"; // CHANGE
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +63,6 @@ export default function ProjectsPage() {
     setUsersLoading(true);
     setAllUsers([]);
     try {
-      // koristi /users koji si dodao
       const res = await api.get("/users", { params: { per_page: 1000 } });
       const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setAllUsers(list);
@@ -86,7 +96,7 @@ export default function ProjectsPage() {
     if (!selectProject) return;
     setBusyAttach(true);
     try {
-      await api.post(`/projects/${selectProject.id}/members`, { user_ids: picked }); // očekuje backend rutu
+      await api.post(`/projects/${selectProject.id}/members`, { user_ids: picked });
       // optimistic update
       const updatedUsersMap = new Map(allUsers.map(u => [u.id, u]));
       const updatedUsers = picked.map(id => updatedUsersMap.get(id)).filter(Boolean);
@@ -100,7 +110,6 @@ export default function ProjectsPage() {
       }));
       closeMembersModal();
     } catch (e) {
-      // CHANGE: user-friendly poruka
       const msg = e?.response?.data?.error || e?.response?.data?.message || "Failed to attach members. Ensure the backend route exists.";
       alert(msg);
     } finally {
@@ -108,14 +117,93 @@ export default function ProjectsPage() {
     }
   };
 
+  // === CREATE PROJECT handlers ===
+  const openCreateModal = async () => {                                  // CHANGE
+    setShowCreate(true);
+    setCreateErr("");
+    setForm({ name: "", description: "" });
+    setCreatePicked([]);
+    setCreateUsersLoading(true);
+    try {
+      const res = await api.get("/users", { params: { per_page: 1000 } });
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      // Po defaultu možeš automatski označiti menadžera/admina, ali backend ga svakako attach-uje
+      // Ovde ostavljamo prazno da korisnik sam izabere dodatne članove
+      setAllUsers(list); // koristimo isti allUsers skup i za ovaj modal
+    } catch {
+      // ako padne, i dalje dozvoljavamo kreiranje bez dodavanja članova
+    } finally {
+      setCreateUsersLoading(false);
+    }
+  };
+
+  const closeCreateModal = () => {                                       // CHANGE
+    setShowCreate(false);
+    setCreateErr("");
+    setForm({ name: "", description: "" });
+    setCreatePicked([]);
+    setCreateUserQuery("");
+  };
+
+  const filteredUsersForCreate = useMemo(() => {                         // CHANGE
+    const q = createUserQuery.toLowerCase();
+    return allUsers.filter(u =>
+      u.name?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      (u.position || "").toLowerCase().includes(q)
+    );
+  }, [allUsers, createUserQuery]);
+
+  const toggleCreatePick = (id) => {                                     // CHANGE
+    setCreatePicked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const submitCreate = async (e) => {                                    // CHANGE
+    e?.preventDefault?.();
+    if (!form.name.trim()) {
+      setCreateErr("Name is required.");
+      return;
+    }
+    setCreating(true);
+    setCreateErr("");
+    try {
+      // 1) Napravi projekat
+      const { data: created } = await api.post("/projects", {
+        name: form.name.trim(),
+        description: form.description || ""
+      });
+
+      // 2) Ako ima izabranih članova → attach
+      if (createPicked.length > 0) {
+        try {
+          await api.post(`/projects/${created.id}/members`, { user_ids: createPicked });
+          // Povuci sve članove projekta (uklj. kreatora) da osvežimo card
+          const { data: refreshed } = await api.get(`/projects/${created.id}`);
+          setProjects(prev => [refreshed, ...prev]);
+        } catch {
+          // u najgorem slučaju samo ubaci projekat bez članova (osim kreatora)
+          setProjects(prev => [created, ...prev]);
+        }
+      } else {
+        setProjects(prev => [created, ...prev]);
+      }
+
+      closeCreateModal();
+    } catch (e) {
+      setCreateErr(e?.response?.data?.message || "Failed to create project.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="container py-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Projects</h3>
-        {(user?.role === "manager" || user?.role === "admin") && (
+        {(canCreateProject) && (                                           /* CHANGE */
           <button
             className="btn btn-primary"
-            onClick={() => alert("Add Project page coming next 😉")}
+            onClick={openCreateModal}                                      /* CHANGE */
           >
             + New Project
           </button>
@@ -133,20 +221,18 @@ export default function ProjectsPage() {
             <div key={p.id} className="col-12 col-md-6 col-lg-4">
               <div className="card shadow-sm border-0 h-100">
                 <div className="card-body d-flex flex-column">
-                  {/* CHANGE: break-word + clamp sprečavaju izlazak teksta */}
                   <div className="d-flex justify-content-between align-items-start gap-2">
                     <div className="break-word" style={{minWidth: 0}}>
-                      <div className="fw-semibold text-truncate" title={p.name}>{p.name}</div> {/* CHANGE */}
-                      <div className="small text-muted line-clamp-2" title={p.description || ""}> {/* CHANGE */}
+                      <div className="fw-semibold text-truncate" title={p.name}>{p.name}</div>
+                      <div className="small text-muted line-clamp-2" title={p.description || ""}>
                         {p.description || "—"}
                       </div>
                     </div>
-                    <span className="badge text-bg-secondary flex-shrink-0 ms-1"> {/* CHANGE */}
+                    <span className="badge text-bg-secondary flex-shrink-0 ms-1">
                       {p.users?.length || 0} members
                     </span>
                   </div>
 
-                  {/* Members (collapsible) */}
                   <details className="mt-3">
                     <summary className="small text-muted" style={{cursor:"pointer"}}>
                       View members
@@ -164,10 +250,9 @@ export default function ProjectsPage() {
                   </details>
 
                   <div className="mt-auto d-flex justify-content-between align-items-center pt-3">
-                    {/* CHANGE: Open → Project details umesto /tasks */}
                     <button
                       className="btn btn-outline-primary btn-sm"
-                      onClick={() => navigate(`/projects/${p.id}`)} // CHANGE
+                      onClick={() => navigate(`/projects/${p.id}`)}
                     >
                       Open
                     </button>
@@ -189,7 +274,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Add Members Modal */}
+      {/* Add Members Modal (existing) */}
       {selectProject && (
         <div
           className="modal fade show"
@@ -251,6 +336,98 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
+
+      {/* === CREATE PROJECT MODAL === */}
+      {showCreate && (                                                     /* CHANGE */
+        <div
+          className="modal fade show"
+          style={{ display: "block", background: "rgba(0,0,0,0.35)" }}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div className="modal-dialog modal-dialog-scrollable">
+            <form className="modal-content" onSubmit={submitCreate}>
+              <div className="modal-header">
+                <h5 className="modal-title">New Project</h5>
+                <button type="button" className="btn-close" onClick={closeCreateModal}></button>
+              </div>
+              <div className="modal-body">
+                {createErr && <div className="alert alert-danger">{createErr}</div>}
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Name</label>
+                  <input
+                    className="form-control"
+                    value={form.name}
+                    onChange={(e)=>setForm({...form, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Description</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    value={form.description}
+                    onChange={(e)=>setForm({...form, description: e.target.value})}
+                    placeholder="(optional)"
+                  />
+                </div>
+
+                {/* Optional: pre‑attach members right away */}
+                <div className="mb-2">
+                  <label className="form-label fw-semibold">Add members (optional)</label>
+                  {createUsersLoading ? (
+                    <div>Loading users…</div>
+                  ) : (
+                    <>
+                      <input
+                        className="form-control mb-2"
+                        placeholder="Search users…"
+                        value={createUserQuery}
+                        onChange={(e)=>setCreateUserQuery(e.target.value)}
+                      />
+                      <div className="list-group" style={{ maxHeight: 260, overflowY: "auto" }}>
+                        {filteredUsersForCreate.map(u => (
+                          <label key={u.id} className="list-group-item d-flex align-items-center">
+                            <input
+                              className="form-check-input me-2"
+                              type="checkbox"
+                              checked={createPicked.includes(u.id)}
+                              onChange={()=>toggleCreatePick(u.id)}
+                            />
+                            <div className="break-word">
+                              <div className="fw-semibold small">
+                                {u.name} <span className="text-muted">· {u.role}</span>
+                              </div>
+                              <div className="small text-muted">
+                                {u.email}{u.position ? ` · ${u.position}` : ""}
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                        {filteredUsersForCreate.length === 0 && (
+                          <div className="text-muted small">No users.</div>
+                        )}
+                      </div>
+                      <div className="form-text">
+                        The creator is added automatically; here you can add more members.
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline-secondary" onClick={closeCreateModal}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={creating}>
+                  {creating ? "Creating…" : "Create project"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {(selectProject || showCreate) && <div className="modal-backdrop fade show" />} {/* CHANGE */}
     </div>
   );
 }

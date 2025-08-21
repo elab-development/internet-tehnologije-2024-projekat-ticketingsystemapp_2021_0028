@@ -14,6 +14,7 @@ use App\Http\Controllers\MotivationController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AttachmentController;
 
 Route::get('/test', function () {
     return ['message' => 'API working!'];
@@ -50,6 +51,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/projects/{id}/members', [ProjectController::class, 'membersIndex']);   // CHANGE
     Route::post('/projects/{id}/members', [ProjectController::class, 'membersStore']);  // CHANGE
     Route::delete('/projects/{id}/members/{userId}', [ProjectController::class, 'membersDestroy']); // CHANGE
+
+    Route::post('/tasks/{taskId}/attachments', [AttachmentController::class, 'store']); // CHANGE
+    Route::get('/tasks/{taskId}/attachments', [AttachmentController::class, 'indexByTask']); // CHANGE
+    Route::get('/attachments/{id}/download', [AttachmentController::class, 'download']);
 });
 
 Route::middleware('auth:sanctum')->group(function () {

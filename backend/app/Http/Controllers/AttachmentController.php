@@ -56,4 +56,19 @@ class AttachmentController extends Controller
 
         return response()->json(['error' => 'Unauthorized'], 403);
     }
+
+    public function indexByTask($taskId)
+    {
+        $task = Task::with('project')->findOrFail($taskId);
+        $user = Auth::user();
+
+        if (
+            $user->role === 'admin' ||
+            ($user->role === 'manager' && $task->project && $task->project->created_by === $user->id) ||
+            ($user->role === 'employee' && $task->assigned_to === $user->id)
+        ) {
+            return \App\Models\Attachment::where('task_id', $taskId)->get();
+        }
+        return response()->json(['error' => 'Unauthorized'], 403);
+    }
 }
