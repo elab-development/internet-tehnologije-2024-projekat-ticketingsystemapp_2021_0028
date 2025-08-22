@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
+import Pagination from "../components/Pagination"; // CHANGE: new component
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -29,9 +30,13 @@ export default function ProjectsPage() {
   const [createUsersLoading, setCreateUsersLoading] = useState(false);
   const [createUserQuery, setCreateUserQuery] = useState("");
 
-  // === SORT state (NEW) ===
-  const [sortKey, setSortKey] = useState("name");     // CHANGE: name | created_at | members
-  const [sortDir, setSortDir] = useState("asc");      // CHANGE: asc | desc
+  // === SORT state ===
+  const [sortKey, setSortKey] = useState("name");     // name | created_at | members
+  const [sortDir, setSortDir] = useState("asc");      // asc | desc
+
+  // === PAGINATION state (NEW) ===
+  const [page, setPage] = useState(1);                // CHANGE
+  const [pageSize, setPageSize] = useState(6);        // CHANGE
 
   const canManageProject = (project) => {
     if (!user) return false;
@@ -61,18 +66,14 @@ export default function ProjectsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // CHANGE: sortiranje
+  // CHANGE: sorting
   const sortedProjects = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     const safe = (v) => (v ?? "");
     const toTime = (v) => (v ? new Date(v).getTime() : 0);
     return [...projects].sort((a, b) => {
-      if (sortKey === "name") {
-        return safe(a.name).localeCompare(safe(b.name)) * dir;
-      }
-      if (sortKey === "created_at") {
-        return (toTime(a.created_at) - toTime(b.created_at)) * dir;
-      }
+      if (sortKey === "name") return safe(a.name).localeCompare(safe(b.name)) * dir;
+      if (sortKey === "created_at") return (toTime(a.created_at) - toTime(b.created_at)) * dir;
       if (sortKey === "members") {
         const ma = a?.users?.length || 0;
         const mb = b?.users?.length || 0;
@@ -81,6 +82,17 @@ export default function ProjectsPage() {
       return 0;
     });
   }, [projects, sortKey, sortDir]);
+
+  // CHANGE: paginate after sorting
+  const totalProjects = sortedProjects.length; // CHANGE
+  const startIndex = (page - 1) * pageSize;    // CHANGE
+  const pageItems = useMemo(                 // CHANGE
+    () => sortedProjects.slice(startIndex, startIndex + pageSize),
+    [sortedProjects, startIndex, pageSize]
+  );
+
+  // Reset page when criteria changes
+  useEffect(() => { setPage(1); }, [sortKey, sortDir, pageSize]); // CHANGE
 
   const openMembersModal = async (project) => {
     setSelectProject(project);
@@ -122,7 +134,6 @@ export default function ProjectsPage() {
     setBusyAttach(true);
     try {
       await api.post(`/projects/${selectProject.id}/members`, { user_ids: picked });
-      // optimistic update
       const updatedUsersMap = new Map(allUsers.map(u => [u.id, u]));
       const updatedUsers = picked.map(id => updatedUsersMap.get(id)).filter(Boolean);
 
@@ -142,7 +153,6 @@ export default function ProjectsPage() {
     }
   };
 
-  // === CREATE PROJECT handlers ===
   const openCreateModal = async () => {
     setShowCreate(true);
     setCreateErr("");
@@ -152,10 +162,8 @@ export default function ProjectsPage() {
     try {
       const res = await api.get("/users", { params: { per_page: 1000 } });
       const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      setAllUsers(list); // koristimo isti allUsers skup i za ovaj modal
-    } catch {
-      /* ignore */
-    } finally {
+      setAllUsers(list);
+    } catch { /* ignore */ } finally {
       setCreateUsersLoading(false);
     }
   };
@@ -190,13 +198,11 @@ export default function ProjectsPage() {
     setCreating(true);
     setCreateErr("");
     try {
-      // 1) napravi projekat
       const { data: created } = await api.post("/projects", {
         name: form.name.trim(),
         description: form.description || ""
       });
 
-      // 2) attach dodatne članove (opciono)
       if (createPicked.length > 0) {
         try {
           await api.post(`/projects/${created.id}/members`, { user_ids: createPicked });
@@ -222,7 +228,7 @@ export default function ProjectsPage() {
       <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Projects</h3>
 
-        {/* CHANGE: sort controls + create */}
+        {/* sort controls + create */}
         <div className="d-flex gap-2">
           <select
             className="form-select form-select-sm"
@@ -244,7 +250,7 @@ export default function ProjectsPage() {
             <option value="desc">Desc</option>
           </select>
 
-          {canCreateProject && (
+          {(user?.role === "manager" || user?.role === "admin") && (
             <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
               + New Project
             </button>
@@ -255,65 +261,77 @@ export default function ProjectsPage() {
       {err && <div className="alert alert-danger">{err}</div>}
       {loading ? (
         <div>Loading…</div>
-      ) : sortedProjects.length === 0 ? (
+      ) : pageItems.length === 0 ? (
         <div className="text-muted">No projects to show.</div>
       ) : (
-        <div className="row g-3">
-          {sortedProjects.map(p => (
-            <div key={p.id} className="col-12 col-md-6 col-lg-4">
-              <div className="card shadow-sm border-0 h-100">
-                <div className="card-body d-flex flex-column">
-                  <div className="d-flex justify-content-between align-items-start gap-2">
-                    <div className="break-word" style={{minWidth: 0}}>
-                      <div className="fw-semibold text-truncate" title={p.name}>{p.name}</div>
-                      <div className="small text-muted line-clamp-2" title={p.description || ""}>
-                        {p.description || "—"}
+        <>
+          <div className="row g-3">
+            {pageItems.map(p => (
+              <div key={p.id} className="col-12 col-md-6 col-lg-4">
+                <div className="card shadow-sm border-0 h-100">
+                  <div className="card-body d-flex flex-column">
+                    <div className="d-flex justify-content-between align-items-start gap-2">
+                      <div className="break-word" style={{minWidth: 0}}>
+                        <div className="fw-semibold text-truncate" title={p.name}>{p.name}</div>
+                        <div className="small text-muted line-clamp-2" title={p.description || ""}>
+                          {p.description || "—"}
+                        </div>
                       </div>
+                      <span className="badge text-bg-secondary flex-shrink-0 ms-1">
+                        {p.users?.length || 0} members
+                      </span>
                     </div>
-                    <span className="badge text-bg-secondary flex-shrink-0 ms-1">
-                      {p.users?.length || 0} members
-                    </span>
-                  </div>
 
-                  <details className="mt-3">
-                    <summary className="small text-muted" style={{cursor:"pointer"}}>
-                      View members
-                    </summary>
-                    <ul className="list-unstyled mt-2 mb-0">
-                      {(p.users || []).map(u => (
-                        <li key={u.id} className="small d-flex align-items-center justify-content-between break-word">
-                          <span>{u.name} <span className="text-muted">· {u.role}</span></span>
-                        </li>
-                      ))}
-                      {(!p.users || p.users.length === 0) && (
-                        <li className="small text-muted">No members.</li>
-                      )}
-                    </ul>
-                  </details>
+                    <details className="mt-3">
+                      <summary className="small text-muted" style={{cursor:"pointer"}}>
+                        View members
+                      </summary>
+                      <ul className="list-unstyled mt-2 mb-0">
+                        {(p.users || []).map(u => (
+                          <li key={u.id} className="small d-flex align-items-center justify-content-between break-word">
+                            <span>{u.name} <span className="text-muted">· {u.role}</span></span>
+                          </li>
+                        ))}
+                        {(!p.users || p.users.length === 0) && (
+                          <li className="small text-muted">No members.</li>
+                        )}
+                      </ul>
+                    </details>
 
-                  <div className="mt-auto d-flex justify-content-between align-items-center pt-3">
-                    <button
-                      className="btn btn-outline-primary btn-sm"
-                      onClick={() => navigate(`/projects/${p.id}`)}
-                    >
-                      Open
-                    </button>
-
-                    {canManageProject(p) && (
+                    <div className="mt-auto d-flex justify-content-between align-items-center pt-3">
                       <button
-                        className="btn btn-outline-secondary btn-sm"
-                        onClick={() => openMembersModal(p)}
-                        title="Add members to this project"
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => navigate(`/projects/${p.id}`)}
                       >
-                        Add members
+                        Open
                       </button>
-                    )}
+
+                      {canManageProject(p) && (
+                        <button
+                          className="btn btn-outline-secondary btn-sm"
+                          onClick={() => openMembersModal(p)}
+                          title="Add members to this project"
+                        >
+                          Add members
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {/* CHANGE: pagination controls */}
+          <Pagination
+            className="mt-3"
+            page={page}
+            pageSize={pageSize}
+            total={totalProjects}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
       {/* Add Members Modal */}

@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
 import TaskModal from "../components/TaskModal";
+import Pagination from "../components/Pagination";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -27,14 +28,13 @@ export default function ProjectDetailsPage() {
   const [taskFilter, setTaskFilter] = useState({ q: "", status: "" });
   const [openTaskId, setOpenTaskId] = useState(null);
 
-  // CHANGE: sort state
+  // sort
   const [sortKey, setSortKey] = useState("created_at"); // title | status | created_at | assignee
   const [sortDir, setSortDir] = useState("desc");
 
-  // create task
-  const [showCreateTask, setShowCreateTask] = useState(false);
-  const [newTask, setNewTask] = useState({ title: "", description: "", assigned_to: "" });
-  const [creating, setCreating] = useState(false);
+  // pagination (tasks)
+  const [taskPage, setTaskPage] = useState(1);
+  const [taskPageSize, setTaskPageSize] = useState(8);
 
   // members modal
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -51,6 +51,11 @@ export default function ProjectDetailsPage() {
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [newEvent, setNewEvent] = useState({ title: "", description: "", start_time: "", end_time: "" });
   const [creatingEvent, setCreatingEvent] = useState(false);
+
+  // create task
+  const [showCreateTask, setShowCreateTask] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", description: "", assigned_to: "" });
+  const [creating, setCreating] = useState(false);
 
   const canManage = useMemo(() => {
     if (!user || !project) return false;
@@ -85,12 +90,14 @@ export default function ProjectDetailsPage() {
       try {
         let res;
         try {
+          // ako backend podrži ?project_id
           res = await api.get("/tasks", { params: { project_id: id, per_page: 200 } });
           const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
           if (!cancelled) setTasks(items);
         } catch {
+          // fallback: povuci veći skup pa filtriraj lokalno
           const r2 = await api.get("/tasks", { params: { per_page: 200 } });
-          const all = Array.isArray(r2.data) ? r2.data : (res.data?.data || []);
+          const all = Array.isArray(r2.data) ? r2.data : (r2.data?.data || []); // FIX: r2
           const onlyThis = all.filter(t => String(t.project_id) === String(id));
           if (!cancelled) setTasks(onlyThis);
         }
@@ -124,7 +131,7 @@ export default function ProjectDetailsPage() {
     return () => { cancel = true; };
   }, [id]);
 
-  // FILTERED + SORTED TASKS
+  // FILTERED + SORTED + PAGED TASKS
   const filteredTasks = useMemo(() => {
     const q = (taskFilter.q || "").toLowerCase();
     const s = taskFilter.status || "";
@@ -138,7 +145,7 @@ export default function ProjectDetailsPage() {
     });
   }, [tasks, taskFilter]);
 
-  const sortedTasks = useMemo(() => {     // CHANGE
+  const sortedTasks = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     const safe = (v) => (v ?? "");
     const toTime = (v) => (v ? new Date(v).getTime() : 0);
@@ -150,6 +157,16 @@ export default function ProjectDetailsPage() {
       return 0;
     });
   }, [filteredTasks, sortKey, sortDir]);
+
+  // reset paginacije kad se menjaju filter/sort
+  useEffect(() => { setTaskPage(1); }, [taskFilter, sortKey, sortDir, taskPageSize]);
+
+  const totalSorted = sortedTasks.length;
+  const sliceStart = (taskPage - 1) * taskPageSize;
+  const pageTasks = useMemo(
+    () => sortedTasks.slice(sliceStart, sliceStart + taskPageSize),
+    [sortedTasks, sliceStart, taskPageSize]
+  );
 
   // MEMBERS MODAL
   const openMembers = async () => {
@@ -265,7 +282,7 @@ export default function ProjectDetailsPage() {
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h4 className="mb-0">🧩 Tasks</h4>
             <div className="d-flex align-items-center gap-2">
-              {/* CHANGE: sort controls */}
+              {/* sort controls */}
               <select className="form-select form-select-sm" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
                 <option value="created_at">Sort: Created</option>
                 <option value="title">Sort: Title</option>
@@ -304,54 +321,67 @@ export default function ProjectDetailsPage() {
             </select>
           </div>
 
-          {/* Tasks table */}
+          {/* Tasks table + Pagination */}
           {tasksLoading ? (
             <div>Loading tasks…</div>
           ) : taskErr ? (
             <div className="alert alert-danger">{taskErr}</div>
-          ) : sortedTasks.length === 0 ? (
+          ) : totalSorted === 0 ? (
             <div className="text-muted">No tasks for this project.</div>
           ) : (
-            <div className="card shadow-sm border-0">
-              <div className="table-responsive">
-                <table className="table align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th style={{width: "38%"}}>Title</th>
-                      <th>Assignee</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th style={{width: 90}}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTasks.map(t => (
-                      <tr key={t.id}>
-                        <td className="break-word" onClick={()=>setOpenTaskId(t.id)} style={{cursor:"pointer"}}>
-                          <div className="fw-semibold">{t.title}</div>
-                          <div className="small text-muted line-clamp-2">{t.description || "—"}</div>
-                        </td>
-                        <td className="small">{t.user?.name || "—"}</td>
-                        <td>
-                          <span className={`badge text-bg-${
-                            t.status==="done"?"success":t.status==="in_progress"?"warning":"secondary"
-                          }`}>{t.status}</span>
-                        </td>
-                        <td className="small text-muted">{t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</td>
-                        <td className="text-end">
-                          <button className="btn btn-sm btn-outline-primary" onClick={()=>setOpenTaskId(t.id)}>Open</button>
-                        </td>
+            <>
+              <div className="card shadow-sm border-0">
+                <div className="table-responsive">
+                  <table className="table align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th style={{width: "38%"}}>Title</th>
+                        <th>Assignee</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th style={{width: 90}}></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pageTasks.map(t => (
+                        <tr key={t.id}>
+                          <td className="break-word" onClick={()=>setOpenTaskId(t.id)} style={{cursor:"pointer"}}>
+                            <div className="fw-semibold">{t.title}</div>
+                            <div className="small text-muted line-clamp-2">{t.description || "—"}</div>
+                          </td>
+                          <td className="small">{t.user?.name || "—"}</td>
+                          <td>
+                            <span className={`badge text-bg-${
+                              t.status==="done"?"success":t.status==="in_progress"?"warning":"secondary"
+                            }`}>{t.status}</span>
+                          </td>
+                          <td className="small text-muted">{t.created_at ? new Date(t.created_at).toLocaleString() : "—"}</td>
+                          <td className="text-end">
+                            <button className="btn btn-sm btn-outline-primary" onClick={()=>setOpenTaskId(t.id)}>Open</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+
+              <Pagination
+                className="mt-3"
+                page={taskPage}
+                pageSize={taskPageSize}
+                total={totalSorted}
+                onPageChange={setTaskPage}
+                onPageSizeChange={setTaskPageSize}
+                sizes={[5, 8, 12, 20]}
+              />
+            </>
           )}
         </div>
 
-        {/* SIDEBAR: Info + Members + Events (bez izmjena) */}
+        {/* SIDEBAR: Info + Members + Events */}
         <div className="col-12 col-lg-4">
+          {/* Project info */}
           <div className="card shadow-sm border-0 mb-3">
             <div className="card-body">
               <h5 className="card-title mb-2">📁 Project</h5>
@@ -360,6 +390,7 @@ export default function ProjectDetailsPage() {
             </div>
           </div>
 
+          {/* Members */}
           <div className="card shadow-sm border-0 mb-3">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
@@ -392,6 +423,7 @@ export default function ProjectDetailsPage() {
             </div>
           </div>
 
+          {/* Events */}
           <div className="card shadow-sm border-0">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
