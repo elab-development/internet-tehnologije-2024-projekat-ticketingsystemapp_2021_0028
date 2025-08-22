@@ -102,15 +102,15 @@ class ProjectController extends Controller
         return response()->json(['message' => 'Project deleted']);
     }
 
-    // ===== MEMBERS ENDPOINTS =====
+    
 
-    // CHANGE: GET /projects/{id}/members — listanje članova
+    
     public function membersIndex($id)
     {
         $auth = Auth::user();
         $project = Project::with('users')->findOrFail($id);
 
-        // Dozvoljeno svima koji imaju pristup projektu (isti uslovi kao show)
+        
         if (
             $auth->role === 'admin' ||
             ($auth->role === 'manager' && $project->created_by == $auth->id) ||
@@ -122,14 +122,14 @@ class ProjectController extends Controller
         return response()->json(['error' => 'Unauthorized'], 403);
     }
 
-    // CHANGE: POST /projects/{id}/members — dodavanje članova (attach)
-    // body: { user_ids: [1,2,3] }
+    
+    
     public function membersStore(Request $request, $id)
     {
         $auth = Auth::user();
         $project = Project::with('users')->findOrFail($id);
 
-        // Samo admin ili manager koji je vlasnik projekta
+        
         if (
             $auth->role !== 'admin' &&
             !($auth->role === 'manager' && $project->created_by == $auth->id)
@@ -142,20 +142,20 @@ class ProjectController extends Controller
             'user_ids.*' => 'integer|exists:users,id',
         ]);
 
-        // attach bez dupliranja
+        
         $project->users()->syncWithoutDetaching($data['user_ids']);
 
-        // vrati sve članove posle izmene
+        
         return response()->json($project->users()->get());
     }
 
-    // CHANGE: DELETE /projects/{id}/members/{userId} — uklanjanje člana (detach)
+    
     public function membersDestroy($id, $userId)
     {
         $auth = Auth::user();
         $project = Project::with('users')->findOrFail($id);
 
-        // Samo admin ili manager koji je vlasnik projekta
+        
         if (
             $auth->role !== 'admin' &&
             !($auth->role === 'manager' && $project->created_by == $auth->id)

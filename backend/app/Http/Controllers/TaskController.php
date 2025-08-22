@@ -13,26 +13,26 @@ class TaskController extends Controller
     {
         $user = Auth::user();
 
-        // MARK: NEW — bazni upit sa relacijama
+        
         $query = Task::with(['project', 'user']);
 
-        // MARK: NEW — ako je tražen project_id, radimo autorizaciju po projektu i vraćamo taskove tog projekta
+        
         if ($request->filled('project_id')) {
             $projectId = (int) $request->project_id;
             $project = Project::with('users')->findOrFail($projectId);
 
-            // admin: sve
+            
             if ($user->role === 'admin') {
                 $query->where('project_id', $projectId);
             }
-            // manager: samo sopstveni projekti
+            
             elseif ($user->role === 'manager') {
                 if ((int)$project->created_by !== (int)$user->id) {
                     return response()->json(['error' => 'Unauthorized project'], 403);
                 }
                 $query->where('project_id', $projectId);
             }
-            // employee: mora biti član projekta da vidi taskove
+            
             else {
                 $isMember = $project->users->contains('id', $user->id);
                 if (!$isMember) {
@@ -41,7 +41,7 @@ class TaskController extends Controller
                 $query->where('project_id', $projectId);
             }
         } else {
-            // MARK: OLD BEHAVIOR — kad NEMA project_id filtera, zadržavamo dosadašnja pravila
+            
             if ($user->role === 'manager') {
                 $query->whereHas('project', function ($q) use ($user) {
                     $q->where('created_by', $user->id);
@@ -51,7 +51,7 @@ class TaskController extends Controller
             }
         }
 
-        // postojeći filteri ostaju
+        
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -93,13 +93,13 @@ class TaskController extends Controller
 
         $task = Task::create($validated);
 
-        // MARK: NEW — vratimo sa relacijama da frontend odmah ima user i project
+        
         return response()->json($task->load(['project', 'user']), 201);
     }
 
     public function show($id)
     {
-        $task = Task::with(['project', 'user'])->findOrFail($id); // MARK: keep relations loaded
+        $task = Task::with(['project', 'user'])->findOrFail($id); 
         $user = Auth::user();
 
         if ($user->role === 'admin') {
@@ -125,7 +125,7 @@ class TaskController extends Controller
 
     public function update(Request $request, $id)
     {
-        $task = Task::with(['project', 'user'])->findOrFail($id); // MARK: keep relations loaded
+        $task = Task::with(['project', 'user'])->findOrFail($id); 
         $user = Auth::user();
 
         $validated = $request->validate([
@@ -137,7 +137,7 @@ class TaskController extends Controller
 
         if ($user->role === 'admin' || ($user->role === 'manager' && $task->project->created_by === $user->id)) {
             $task->update($validated);
-            return response()->json($task->load(['project', 'user'])); // MARK: ensure relations in response
+            return response()->json($task->load(['project', 'user'])); 
         }
 
         if (
@@ -147,7 +147,7 @@ class TaskController extends Controller
         ) {
             $task->status = $validated['status'];
             $task->save();
-            return response()->json($task->load(['project', 'user'])); // MARK: ensure relations in response
+            return response()->json($task->load(['project', 'user'])); 
         }
 
         return response()->json(['error' => 'Unauthorized'], 403);

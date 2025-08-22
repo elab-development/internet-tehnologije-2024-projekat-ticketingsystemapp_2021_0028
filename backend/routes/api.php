@@ -26,6 +26,8 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    Route::get('/users/messageable', [UserController::class, 'messageable']);
+
     Route::get('/user', [UserController::class, 'me']);
     Route::get('/users', [UserController::class, 'index']);
     Route::get('/users/{id}', [UserController::class, 'show']);
@@ -47,13 +49,13 @@ Route::middleware(['auth:sanctum', 'employee'])->get('/employee-only', function 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('projects', ProjectController::class);
 
-    // CHANGE: members rute za projekte
-    Route::get('/projects/{id}/members', [ProjectController::class, 'membersIndex']);   // CHANGE
-    Route::post('/projects/{id}/members', [ProjectController::class, 'membersStore']);  // CHANGE
-    Route::delete('/projects/{id}/members/{userId}', [ProjectController::class, 'membersDestroy']); // CHANGE
+    
+    Route::get('/projects/{id}/members', [ProjectController::class, 'membersIndex']);   
+    Route::post('/projects/{id}/members', [ProjectController::class, 'membersStore']);  
+    Route::delete('/projects/{id}/members/{userId}', [ProjectController::class, 'membersDestroy']); 
 
-    Route::post('/tasks/{taskId}/attachments', [AttachmentController::class, 'store']); // CHANGE
-    Route::get('/tasks/{taskId}/attachments', [AttachmentController::class, 'indexByTask']); // CHANGE
+    Route::post('/tasks/{taskId}/attachments', [AttachmentController::class, 'store']); 
+    Route::get('/tasks/{taskId}/attachments', [AttachmentController::class, 'indexByTask']); 
     Route::get('/attachments/{id}/download', [AttachmentController::class, 'download']);
 });
 
@@ -66,9 +68,20 @@ Route::apiResource('time-entries', TimeEntryController::class)->middleware('auth
 Route::apiResource('comments', CommentController::class)->middleware('auth:sanctum');
 
 Route::middleware('auth:sanctum')->group(function () {
+    
+    Route::get('/messages/peers', [MessageController::class, 'peers']); 
+
+    
+    Route::get('/messages/thread/{peerId}', [MessageController::class, 'thread']); 
+
+    
+    Route::patch('/messages/read/{peerId}', [MessageController::class, 'markRead']); 
+
+    
     Route::apiResource('messages', MessageController::class)->only([
         'index', 'store', 'show', 'destroy'
     ]);
+
 });
 
 Route::apiResource('events', EventController::class)->middleware('auth:sanctum');
@@ -79,5 +92,5 @@ Route::get('/motivation', [MotivationController::class, 'index']);
 
 Route::get('/statistics', [StatisticsController::class, 'index']);
 
-// NOTE: tvoja ruta za izveštaj je /report/hours (ostavljam kako je)
+
 Route::get('/report/hours', [ReportController::class, 'userWorkHours']);

@@ -1,4 +1,3 @@
-// src/components/TaskModal.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
@@ -17,12 +16,12 @@ export default function TaskModal({ taskId, onClose, onUpdated }) {
 
   const [statusBusy, setStatusBusy] = useState(false);
 
-  // comments
+  
   const [comments, setComments] = useState([]);
   const [commentBusy, setCommentBusy] = useState(false);
   const [commentText, setCommentText] = useState("");
 
-  // attachments
+  
   const [files, setFiles] = useState([]);
   const [uploadBusy, setUploadBusy] = useState(false);
 
@@ -79,7 +78,7 @@ export default function TaskModal({ taskId, onClose, onUpdated }) {
     setCommentBusy(true);
     try {
       const { data } = await api.post("/comments", { task_id: task.id, content: commentText.trim() });
-      // brzo dodaj na vrh (a index backend svakako vraća DESC)
+      
       setComments(prev => [{ ...data, user: { name: user.name, role: user.role } }, ...prev]);
       setCommentText("");
     } catch (e) {

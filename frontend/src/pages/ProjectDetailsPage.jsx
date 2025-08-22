@@ -1,10 +1,11 @@
-// src/pages/ProjectDetailsPage.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
 import TaskModal from "../components/TaskModal";
 import Pagination from "../components/Pagination";
+import Breadcrumbs from "../components/Breadcrumbs";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -21,22 +22,22 @@ export default function ProjectDetailsPage() {
   const [err, setErr] = useState("");
   const [project, setProject] = useState(null);
 
-  // tasks
+  
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [taskErr, setTaskErr] = useState("");
   const [taskFilter, setTaskFilter] = useState({ q: "", status: "" });
   const [openTaskId, setOpenTaskId] = useState(null);
 
-  // sort
-  const [sortKey, setSortKey] = useState("created_at"); // title | status | created_at | assignee
+  
+  const [sortKey, setSortKey] = useState("created_at"); 
   const [sortDir, setSortDir] = useState("desc");
 
-  // pagination (tasks)
+  
   const [taskPage, setTaskPage] = useState(1);
   const [taskPageSize, setTaskPageSize] = useState(8);
 
-  // members modal
+  
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
@@ -44,7 +45,7 @@ export default function ProjectDetailsPage() {
   const [busyAttach, setBusyAttach] = useState(false);
   const [userQuery, setUserQuery] = useState("");
 
-  // events
+  
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventErr, setEventErr] = useState("");
@@ -52,7 +53,7 @@ export default function ProjectDetailsPage() {
   const [newEvent, setNewEvent] = useState({ title: "", description: "", start_time: "", end_time: "" });
   const [creatingEvent, setCreatingEvent] = useState(false);
 
-  // create task
+  
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", description: "", assigned_to: "" });
   const [creating, setCreating] = useState(false);
@@ -64,7 +65,7 @@ export default function ProjectDetailsPage() {
     return false;
   }, [user, project]);
 
-  // LOAD PROJECT
+  
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -82,7 +83,7 @@ export default function ProjectDetailsPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // LOAD TASKS (scope: samo za ovaj projekat)
+  
   useEffect(() => {
     let cancelled = false;
     const loadTasks = async () => {
@@ -90,14 +91,14 @@ export default function ProjectDetailsPage() {
       try {
         let res;
         try {
-          // ako backend podrži ?project_id
+          
           res = await api.get("/tasks", { params: { project_id: id, per_page: 200 } });
           const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
           if (!cancelled) setTasks(items);
         } catch {
-          // fallback: povuci veći skup pa filtriraj lokalno
+          
           const r2 = await api.get("/tasks", { params: { per_page: 200 } });
-          const all = Array.isArray(r2.data) ? r2.data : (r2.data?.data || []); // FIX: r2
+          const all = Array.isArray(r2.data) ? r2.data : (r2.data?.data || []); 
           const onlyThis = all.filter(t => String(t.project_id) === String(id));
           if (!cancelled) setTasks(onlyThis);
         }
@@ -111,7 +112,7 @@ export default function ProjectDetailsPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // LOAD EVENTS
+  
   useEffect(() => {
     let cancel = false;
     const loadEv = async () => {
@@ -131,7 +132,7 @@ export default function ProjectDetailsPage() {
     return () => { cancel = true; };
   }, [id]);
 
-  // FILTERED + SORTED + PAGED TASKS
+  
   const filteredTasks = useMemo(() => {
     const q = (taskFilter.q || "").toLowerCase();
     const s = taskFilter.status || "";
@@ -158,7 +159,7 @@ export default function ProjectDetailsPage() {
     });
   }, [filteredTasks, sortKey, sortDir]);
 
-  // reset paginacije kad se menjaju filter/sort
+  
   useEffect(() => { setTaskPage(1); }, [taskFilter, sortKey, sortDir, taskPageSize]);
 
   const totalSorted = sortedTasks.length;
@@ -168,7 +169,7 @@ export default function ProjectDetailsPage() {
     [sortedTasks, sliceStart, taskPageSize]
   );
 
-  // MEMBERS MODAL
+  
   const openMembers = async () => {
     setPicked(project?.users?.map(u => u.id) || []);
     setShowMembersModal(true);
@@ -215,7 +216,7 @@ export default function ProjectDetailsPage() {
     }
   };
 
-  // CREATE TASK
+  
   const canCreateTask = canManage;
   const submitCreateTask = async (e) => {
     e?.preventDefault?.();
@@ -242,7 +243,7 @@ export default function ProjectDetailsPage() {
     }
   };
 
-  // CREATE EVENT
+  
   const canCreateEvent = canManage;
   const submitCreateEvent = async (e) => {
     e?.preventDefault?.();
@@ -276,6 +277,12 @@ export default function ProjectDetailsPage() {
 
   return (
     <div className="container py-4">
+      <Breadcrumbs
+        trail={[
+          { label: "Projects", to: "/projects" },
+          { label: project.name } 
+        ]}
+      />
       <div className="row g-4">
         {/* MAIN: Tasks */}
         <div className="col-12 col-lg-8">

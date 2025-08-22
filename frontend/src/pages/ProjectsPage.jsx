@@ -1,9 +1,10 @@
-// src/pages/ProjectsPage.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
-import Pagination from "../components/Pagination"; // CHANGE: new component
+import Pagination from "../components/Pagination"; 
+import Breadcrumbs from "../components/Breadcrumbs";
 
 export default function ProjectsPage() {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ export default function ProjectsPage() {
   const [err, setErr] = useState("");
   const [projects, setProjects] = useState([]);
 
-  // Members modal (existing)
+  
   const [selectProject, setSelectProject] = useState(null);
   const [usersLoading, setUsersLoading] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
@@ -21,7 +22,7 @@ export default function ProjectsPage() {
   const [busyAttach, setBusyAttach] = useState(false);
   const [userQuery, setUserQuery] = useState("");
 
-  // === CREATE PROJECT modal state ===
+  
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState("");
@@ -30,13 +31,13 @@ export default function ProjectsPage() {
   const [createUsersLoading, setCreateUsersLoading] = useState(false);
   const [createUserQuery, setCreateUserQuery] = useState("");
 
-  // === SORT state ===
-  const [sortKey, setSortKey] = useState("name");     // name | created_at | members
-  const [sortDir, setSortDir] = useState("asc");      // asc | desc
+  
+  const [sortKey, setSortKey] = useState("name");     
+  const [sortDir, setSortDir] = useState("asc");      
 
-  // === PAGINATION state (NEW) ===
-  const [page, setPage] = useState(1);                // CHANGE
-  const [pageSize, setPageSize] = useState(6);        // CHANGE
+  
+  const [page, setPage] = useState(1);                
+  const [pageSize, setPageSize] = useState(6);        
 
   const canManageProject = (project) => {
     if (!user) return false;
@@ -66,7 +67,7 @@ export default function ProjectsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // CHANGE: sorting
+  
   const sortedProjects = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     const safe = (v) => (v ?? "");
@@ -83,16 +84,16 @@ export default function ProjectsPage() {
     });
   }, [projects, sortKey, sortDir]);
 
-  // CHANGE: paginate after sorting
-  const totalProjects = sortedProjects.length; // CHANGE
-  const startIndex = (page - 1) * pageSize;    // CHANGE
-  const pageItems = useMemo(                 // CHANGE
+  
+  const totalProjects = sortedProjects.length; 
+  const startIndex = (page - 1) * pageSize;    
+  const pageItems = useMemo(                 
     () => sortedProjects.slice(startIndex, startIndex + pageSize),
     [sortedProjects, startIndex, pageSize]
   );
 
-  // Reset page when criteria changes
-  useEffect(() => { setPage(1); }, [sortKey, sortDir, pageSize]); // CHANGE
+  
+  useEffect(() => { setPage(1); }, [sortKey, sortDir, pageSize]); 
 
   const openMembersModal = async (project) => {
     setSelectProject(project);
@@ -225,6 +226,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="container py-4">
+      <Breadcrumbs trail={[{ label: "Projects" }]} />
       <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Projects</h3>
 

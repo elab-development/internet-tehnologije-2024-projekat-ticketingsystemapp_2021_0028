@@ -1,4 +1,4 @@
-// src/pages/TaskPage.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
@@ -11,7 +11,7 @@ export default function TaskPage() {
   const [err, setErr] = useState("");
   const [tasks, setTasks] = useState([]);
 
-  // pagination over project groups
+  
   const [groupPage, setGroupPage] = useState(1);
   const [groupsPerPage, setGroupsPerPage] = useState(4);
 
@@ -20,7 +20,7 @@ export default function TaskPage() {
     const load = async () => {
       setLoading(true); setErr("");
       try {
-        // povuci “dovoljno” – backend za /tasks već filtrira po ulozi
+        
         const res = await api.get("/tasks", { params: { per_page: 200 } });
         const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
         if (!cancel) setTasks(items);
@@ -34,7 +34,7 @@ export default function TaskPage() {
     return () => { cancel = true; };
   }, []);
 
-  // group by project
+  
   const groups = useMemo(() => {
     const map = new Map();
     for (const t of tasks) {
@@ -48,11 +48,11 @@ export default function TaskPage() {
       }
       map.get(pid).tasks.push(t);
     }
-    // sort groups by projectName asc
+    
     return [...map.values()].sort((a,b)=>a.projectName.localeCompare(b.projectName));
   }, [tasks]);
 
-  // pagination over groups
+  
   const totalGroups = groups.length;
   const start = (groupPage - 1) * groupsPerPage;
   const pageGroups = useMemo(

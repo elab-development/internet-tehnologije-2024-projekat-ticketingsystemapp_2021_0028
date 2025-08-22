@@ -83,4 +83,24 @@ class UserController extends Controller
         $user->delete();
         return response()->json(['message' => 'User deleted']);
     }
+
+    public function messageable(Request $request)
+    {
+        $auth = Auth::user();
+
+        $q = User::query()
+            ->where('id', '<>', $auth->id); 
+
+        if ($request->filled('q')) {
+            $term = $request->q;
+            $q->where(function ($x) use ($term) {
+                $x->where('name', 'like', "%{$term}%")
+                ->orWhere('email', 'like', "%{$term}%")
+                ->orWhere('position', 'like', "%{$term}%");
+            });
+        }
+
+        $perPage = $request->input('per_page', 25);
+        return $q->orderBy('name')->paginate($perPage);
+    }
 }
