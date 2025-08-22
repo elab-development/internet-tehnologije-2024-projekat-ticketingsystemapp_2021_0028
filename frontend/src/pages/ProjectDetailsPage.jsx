@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../services/api";
 import useAuth from "../hooks/useAuth";
-import TaskModal from "../components/TaskModal"; // CHANGE
+import TaskModal from "../components/TaskModal";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -25,7 +25,11 @@ export default function ProjectDetailsPage() {
   const [tasksLoading, setTasksLoading] = useState(true);
   const [taskErr, setTaskErr] = useState("");
   const [taskFilter, setTaskFilter] = useState({ q: "", status: "" });
-  const [openTaskId, setOpenTaskId] = useState(null); // CHANGE
+  const [openTaskId, setOpenTaskId] = useState(null);
+
+  // CHANGE: sort state
+  const [sortKey, setSortKey] = useState("created_at"); // title | status | created_at | assignee
+  const [sortDir, setSortDir] = useState("desc");
 
   // create task
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -41,12 +45,12 @@ export default function ProjectDetailsPage() {
   const [userQuery, setUserQuery] = useState("");
 
   // events
-  const [events, setEvents] = useState([]);           // CHANGE
-  const [eventsLoading, setEventsLoading] = useState(true); // CHANGE
-  const [eventErr, setEventErr] = useState("");       // CHANGE
-  const [showCreateEvent, setShowCreateEvent] = useState(false); // CHANGE
-  const [newEvent, setNewEvent] = useState({ title: "", description: "", start_time: "", end_time: "" }); // CHANGE
-  const [creatingEvent, setCreatingEvent] = useState(false); // CHANGE
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventErr, setEventErr] = useState("");
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [newEvent, setNewEvent] = useState({ title: "", description: "", start_time: "", end_time: "" });
+  const [creatingEvent, setCreatingEvent] = useState(false);
 
   const canManage = useMemo(() => {
     if (!user || !project) return false;
@@ -73,24 +77,32 @@ export default function ProjectDetailsPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  // LOAD TASKS
+  // LOAD TASKS (scope: samo za ovaj projekat)
   useEffect(() => {
-  let cancelled = false;
-  const loadTasks = async () => {
-    setTasksLoading(true); setTaskErr("");
-    try {
-      const res = await api.get("/tasks", { params: { project_id: id, per_page: 100 } }); // MARK: CHANGED
-      const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      if (!cancelled) setTasks(items);
-    } catch (e) {
-      if (!cancelled) setTaskErr(e?.response?.data?.message || "Failed to load tasks.");
-    } finally {
-      if (!cancelled) setTasksLoading(false);
-    }
-  };
-  loadTasks();
-  return () => { cancelled = true; };
-}, [id]);
+    let cancelled = false;
+    const loadTasks = async () => {
+      setTasksLoading(true); setTaskErr("");
+      try {
+        let res;
+        try {
+          res = await api.get("/tasks", { params: { project_id: id, per_page: 200 } });
+          const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          if (!cancelled) setTasks(items);
+        } catch {
+          const r2 = await api.get("/tasks", { params: { per_page: 200 } });
+          const all = Array.isArray(r2.data) ? r2.data : (res.data?.data || []);
+          const onlyThis = all.filter(t => String(t.project_id) === String(id));
+          if (!cancelled) setTasks(onlyThis);
+        }
+      } catch (e) {
+        if (!cancelled) setTaskErr(e?.response?.data?.message || "Failed to load tasks.");
+      } finally {
+        if (!cancelled) setTasksLoading(false);
+      }
+    };
+    loadTasks();
+    return () => { cancelled = true; };
+  }, [id]);
 
   // LOAD EVENTS
   useEffect(() => {
@@ -112,7 +124,7 @@ export default function ProjectDetailsPage() {
     return () => { cancel = true; };
   }, [id]);
 
-  // FILTERED TASKS
+  // FILTERED + SORTED TASKS
   const filteredTasks = useMemo(() => {
     const q = (taskFilter.q || "").toLowerCase();
     const s = taskFilter.status || "";
@@ -126,7 +138,20 @@ export default function ProjectDetailsPage() {
     });
   }, [tasks, taskFilter]);
 
-  // OPEN MEMBERS MODAL
+  const sortedTasks = useMemo(() => {     // CHANGE
+    const dir = sortDir === "asc" ? 1 : -1;
+    const safe = (v) => (v ?? "");
+    const toTime = (v) => (v ? new Date(v).getTime() : 0);
+    return [...filteredTasks].sort((a,b) => {
+      if (sortKey === "title") return safe(a.title).localeCompare(safe(b.title)) * dir;
+      if (sortKey === "status") return safe(a.status).localeCompare(safe(b.status)) * dir;
+      if (sortKey === "created_at") return (toTime(a.created_at)-toTime(b.created_at)) * dir;
+      if (sortKey === "assignee") return safe(a.user?.name).localeCompare(safe(b.user?.name)) * dir;
+      return 0;
+    });
+  }, [filteredTasks, sortKey, sortDir]);
+
+  // MEMBERS MODAL
   const openMembers = async () => {
     setPicked(project?.users?.map(u => u.id) || []);
     setShowMembersModal(true);
@@ -161,7 +186,7 @@ export default function ProjectDetailsPage() {
     setBusyAttach(true);
     try {
       await api.post(`/projects/${project.id}/members`, { user_ids: picked });
-      const res = await api.get(`/projects/${project.id}`); // refresh
+      const res = await api.get(`/projects/${project.id}`);
       setProject(res.data);
       setShowMembersModal(false);
       setUserQuery("");
@@ -173,38 +198,36 @@ export default function ProjectDetailsPage() {
     }
   };
 
-  // CREATE TASK (admin/manager)
+  // CREATE TASK
   const canCreateTask = canManage;
   const submitCreateTask = async (e) => {
-  e?.preventDefault?.();
-  if (!project) return;
-  setCreating(true);
-  try {
-    const payload = {
-      project_id: Number(project.id),
-      title: newTask.title,
-      description: newTask.description || "",
-      assigned_to: newTask.assigned_to ? Number(newTask.assigned_to) : null,
-      status: "todo",
-    };
-    const { data } = await api.post("/tasks", payload);
-    // data već ima .user i .project
-    if (String(data.project_id) === String(project.id)) {
-      setTasks(prev => [data, ...prev]);
+    e?.preventDefault?.();
+    if (!project) return;
+    setCreating(true);
+    try {
+      const payload = {
+        project_id: Number(project.id),
+        title: newTask.title,
+        description: newTask.description || "",
+        assigned_to: newTask.assigned_to ? Number(newTask.assigned_to) : null,
+        status: "todo",
+      };
+      const { data } = await api.post("/tasks", payload);
+      if (String(data.project_id) === String(project.id)) {
+        setTasks(prev => [data, ...prev]);
+      }
+      setShowCreateTask(false);
+      setNewTask({ title: "", description: "", assigned_to: "" });
+    } catch (e) {
+      alert(e?.response?.data?.error || e?.response?.data?.message || "Failed to create task.");
+    } finally {
+      setCreating(false);
     }
-    setShowCreateTask(false);
-    setNewTask({ title: "", description: "", assigned_to: "" });
-  } catch (e) {
-    alert(e?.response?.data?.error || e?.response?.data?.message || "Failed to create task.");
-  } finally {
-    setCreating(false);
-  }
-};
+  };
 
-
-  // CREATE EVENT (admin/manager)
-  const canCreateEvent = canManage; // CHANGE
-  const submitCreateEvent = async (e) => { // CHANGE
+  // CREATE EVENT
+  const canCreateEvent = canManage;
+  const submitCreateEvent = async (e) => {
     e?.preventDefault?.();
     setCreatingEvent(true);
     try {
@@ -226,7 +249,7 @@ export default function ProjectDetailsPage() {
     }
   };
 
-  const onTaskUpdated = (updated) => { // CHANGE
+  const onTaskUpdated = (updated) => {
     setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
   };
 
@@ -237,15 +260,29 @@ export default function ProjectDetailsPage() {
   return (
     <div className="container py-4">
       <div className="row g-4">
-        {/* MAIN: Tasks (tabela pregleda taskova) */}
+        {/* MAIN: Tasks */}
         <div className="col-12 col-lg-8">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <h4 className="mb-0">🧩 Tasks</h4>
-            {canCreateTask && (
-              <button className="btn btn-primary btn-sm" onClick={() => setShowCreateTask(true)}>
-                + New Task
-              </button>
-            )}
+            <div className="d-flex align-items-center gap-2">
+              {/* CHANGE: sort controls */}
+              <select className="form-select form-select-sm" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
+                <option value="created_at">Sort: Created</option>
+                <option value="title">Sort: Title</option>
+                <option value="status">Sort: Status</option>
+                <option value="assignee">Sort: Assignee</option>
+              </select>
+              <select className="form-select form-select-sm" value={sortDir} onChange={(e)=>setSortDir(e.target.value)}>
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+
+              {canCreateTask && (
+                <button className="btn btn-primary btn-sm" onClick={() => setShowCreateTask(true)}>
+                  + New Task
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filters */}
@@ -267,12 +304,12 @@ export default function ProjectDetailsPage() {
             </select>
           </div>
 
-          {/* Tasks list (klik na red otvara modal) */}
+          {/* Tasks table */}
           {tasksLoading ? (
             <div>Loading tasks…</div>
           ) : taskErr ? (
             <div className="alert alert-danger">{taskErr}</div>
-          ) : filteredTasks.length === 0 ? (
+          ) : sortedTasks.length === 0 ? (
             <div className="text-muted">No tasks for this project.</div>
           ) : (
             <div className="card shadow-sm border-0">
@@ -288,7 +325,7 @@ export default function ProjectDetailsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredTasks.map(t => (
+                    {sortedTasks.map(t => (
                       <tr key={t.id}>
                         <td className="break-word" onClick={()=>setOpenTaskId(t.id)} style={{cursor:"pointer"}}>
                           <div className="fw-semibold">{t.title}</div>
@@ -313,9 +350,8 @@ export default function ProjectDetailsPage() {
           )}
         </div>
 
-        {/* SIDEBAR: Info + Members + Events */}
+        {/* SIDEBAR: Info + Members + Events (bez izmjena) */}
         <div className="col-12 col-lg-4">
-          {/* Project info */}
           <div className="card shadow-sm border-0 mb-3">
             <div className="card-body">
               <h5 className="card-title mb-2">📁 Project</h5>
@@ -324,7 +360,6 @@ export default function ProjectDetailsPage() {
             </div>
           </div>
 
-          {/* Members */}
           <div className="card shadow-sm border-0 mb-3">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
@@ -357,7 +392,6 @@ export default function ProjectDetailsPage() {
             </div>
           </div>
 
-          {/* Events */}
           <div className="card shadow-sm border-0">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
@@ -428,7 +462,7 @@ export default function ProjectDetailsPage() {
         </div>
       )}
 
-      {/* ADD: Members Modal */}
+      {/* Add Members Modal */}
       {showMembersModal && (
         <div
           className="modal fade show"
@@ -487,7 +521,6 @@ export default function ProjectDetailsPage() {
           </div>
         </div>
       )}
-      {/* END ADD */}
 
       {/* Create Event Modal */}
       {showCreateEvent && (
@@ -529,7 +562,6 @@ export default function ProjectDetailsPage() {
         </div>
       )}
 
-      {/* Backdrops */}
       {(showCreateTask || showMembersModal || openTaskId || showCreateEvent) && <div className="modal-backdrop fade show" />}
 
       {/* Task modal */}

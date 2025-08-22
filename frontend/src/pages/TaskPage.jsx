@@ -18,6 +18,10 @@ export default function TasksPage() {
   const [filter, setFilter] = useState({ q: "", status: "" });
   const [openTaskId, setOpenTaskId] = useState(null);
 
+  // CHANGE: sort state
+  const [sortKey, setSortKey] = useState("created_at"); // title | status | created_at | assignee
+  const [sortDir, setSortDir] = useState("desc");
+
   useEffect(() => {
     let cancel = false;
     const load = async () => {
@@ -46,16 +50,30 @@ export default function TasksPage() {
     });
   }, [tasks, filter]);
 
+  // CHANGE: sort filtered before grouping
+  const sorted = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const safe = (v) => (v ?? "");
+    const toTime = (v) => (v ? new Date(v).getTime() : 0);
+    return [...filtered].sort((a,b) => {
+      if (sortKey === "title") return safe(a.title).localeCompare(safe(b.title)) * dir;
+      if (sortKey === "status") return safe(a.status).localeCompare(safe(b.status)) * dir;
+      if (sortKey === "created_at") return (toTime(a.created_at)-toTime(b.created_at)) * dir;
+      if (sortKey === "assignee") return safe(a.user?.name).localeCompare(safe(b.user?.name)) * dir;
+      return 0;
+    });
+  }, [filtered, sortKey, sortDir]);
+
   // grupisanje po projektu
   const groups = useMemo(() => {
     const map = new Map();
-    for (const t of filtered) {
+    for (const t of sorted) { // CHANGE: koristimo sorted
       const key = t.project?.name || "—";
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(t);
     }
     return Array.from(map.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
-  }, [filtered]);
+  }, [sorted]);
 
   const onTaskUpdated = (updated) => {
     setTasks(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
@@ -65,6 +83,20 @@ export default function TasksPage() {
     <div className="container py-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Tasks</h3>
+
+        {/* CHANGE: sort controls */}
+        <div className="d-flex gap-2">
+          <select className="form-select form-select-sm" value={sortKey} onChange={(e)=>setSortKey(e.target.value)}>
+            <option value="created_at">Sort: Created</option>
+            <option value="title">Sort: Title</option>
+            <option value="status">Sort: Status</option>
+            <option value="assignee">Sort: Assignee</option>
+          </select>
+          <select className="form-select form-select-sm" value={sortDir} onChange={(e)=>setSortDir(e.target.value)}>
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+        </div>
       </div>
 
       <div className="d-flex gap-2 flex-wrap mb-3">

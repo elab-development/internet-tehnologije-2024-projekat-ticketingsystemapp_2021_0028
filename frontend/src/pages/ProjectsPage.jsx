@@ -21,13 +21,17 @@ export default function ProjectsPage() {
   const [userQuery, setUserQuery] = useState("");
 
   // === CREATE PROJECT modal state ===
-  const [showCreate, setShowCreate] = useState(false);                  // CHANGE
-  const [creating, setCreating] = useState(false);                      // CHANGE
-  const [createErr, setCreateErr] = useState("");                       // CHANGE
-  const [form, setForm] = useState({ name: "", description: "" });      // CHANGE
-  const [createPicked, setCreatePicked] = useState([]);                 // CHANGE
-  const [createUsersLoading, setCreateUsersLoading] = useState(false);  // CHANGE
-  const [createUserQuery, setCreateUserQuery] = useState("");           // CHANGE
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+  const [form, setForm] = useState({ name: "", description: "" });
+  const [createPicked, setCreatePicked] = useState([]);
+  const [createUsersLoading, setCreateUsersLoading] = useState(false);
+  const [createUserQuery, setCreateUserQuery] = useState("");
+
+  // === SORT state (NEW) ===
+  const [sortKey, setSortKey] = useState("name");     // CHANGE: name | created_at | members
+  const [sortDir, setSortDir] = useState("asc");      // CHANGE: asc | desc
 
   const canManageProject = (project) => {
     if (!user) return false;
@@ -36,7 +40,7 @@ export default function ProjectsPage() {
     return false;
   };
 
-  const canCreateProject = user?.role === "admin" || user?.role === "manager"; // CHANGE
+  const canCreateProject = user?.role === "admin" || user?.role === "manager";
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +61,27 @@ export default function ProjectsPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // CHANGE: sortiranje
+  const sortedProjects = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const safe = (v) => (v ?? "");
+    const toTime = (v) => (v ? new Date(v).getTime() : 0);
+    return [...projects].sort((a, b) => {
+      if (sortKey === "name") {
+        return safe(a.name).localeCompare(safe(b.name)) * dir;
+      }
+      if (sortKey === "created_at") {
+        return (toTime(a.created_at) - toTime(b.created_at)) * dir;
+      }
+      if (sortKey === "members") {
+        const ma = a?.users?.length || 0;
+        const mb = b?.users?.length || 0;
+        return (ma - mb) * dir;
+      }
+      return 0;
+    });
+  }, [projects, sortKey, sortDir]);
+
   const openMembersModal = async (project) => {
     setSelectProject(project);
     setPicked(project.users?.map(u => u.id) || []);
@@ -66,7 +91,7 @@ export default function ProjectsPage() {
       const res = await api.get("/users", { params: { per_page: 1000 } });
       const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
       setAllUsers(list);
-    } catch (e) {
+    } catch {
       setAllUsers([]);
     } finally {
       setUsersLoading(false);
@@ -118,7 +143,7 @@ export default function ProjectsPage() {
   };
 
   // === CREATE PROJECT handlers ===
-  const openCreateModal = async () => {                                  // CHANGE
+  const openCreateModal = async () => {
     setShowCreate(true);
     setCreateErr("");
     setForm({ name: "", description: "" });
@@ -127,17 +152,15 @@ export default function ProjectsPage() {
     try {
       const res = await api.get("/users", { params: { per_page: 1000 } });
       const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      // Po defaultu možeš automatski označiti menadžera/admina, ali backend ga svakako attach-uje
-      // Ovde ostavljamo prazno da korisnik sam izabere dodatne članove
       setAllUsers(list); // koristimo isti allUsers skup i za ovaj modal
     } catch {
-      // ako padne, i dalje dozvoljavamo kreiranje bez dodavanja članova
+      /* ignore */
     } finally {
       setCreateUsersLoading(false);
     }
   };
 
-  const closeCreateModal = () => {                                       // CHANGE
+  const closeCreateModal = () => {
     setShowCreate(false);
     setCreateErr("");
     setForm({ name: "", description: "" });
@@ -145,7 +168,7 @@ export default function ProjectsPage() {
     setCreateUserQuery("");
   };
 
-  const filteredUsersForCreate = useMemo(() => {                         // CHANGE
+  const filteredUsersForCreate = useMemo(() => {
     const q = createUserQuery.toLowerCase();
     return allUsers.filter(u =>
       u.name?.toLowerCase().includes(q) ||
@@ -154,11 +177,11 @@ export default function ProjectsPage() {
     );
   }, [allUsers, createUserQuery]);
 
-  const toggleCreatePick = (id) => {                                     // CHANGE
+  const toggleCreatePick = (id) => {
     setCreatePicked(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const submitCreate = async (e) => {                                    // CHANGE
+  const submitCreate = async (e) => {
     e?.preventDefault?.();
     if (!form.name.trim()) {
       setCreateErr("Name is required.");
@@ -167,21 +190,19 @@ export default function ProjectsPage() {
     setCreating(true);
     setCreateErr("");
     try {
-      // 1) Napravi projekat
+      // 1) napravi projekat
       const { data: created } = await api.post("/projects", {
         name: form.name.trim(),
         description: form.description || ""
       });
 
-      // 2) Ako ima izabranih članova → attach
+      // 2) attach dodatne članove (opciono)
       if (createPicked.length > 0) {
         try {
           await api.post(`/projects/${created.id}/members`, { user_ids: createPicked });
-          // Povuci sve članove projekta (uklj. kreatora) da osvežimo card
           const { data: refreshed } = await api.get(`/projects/${created.id}`);
           setProjects(prev => [refreshed, ...prev]);
         } catch {
-          // u najgorem slučaju samo ubaci projekat bez članova (osim kreatora)
           setProjects(prev => [created, ...prev]);
         }
       } else {
@@ -198,26 +219,47 @@ export default function ProjectsPage() {
 
   return (
     <div className="container py-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Projects</h3>
-        {(canCreateProject) && (                                           /* CHANGE */
-          <button
-            className="btn btn-primary"
-            onClick={openCreateModal}                                      /* CHANGE */
+
+        {/* CHANGE: sort controls + create */}
+        <div className="d-flex gap-2">
+          <select
+            className="form-select form-select-sm"
+            value={sortKey}
+            onChange={(e)=>setSortKey(e.target.value)}
+            title="Sort by"
           >
-            + New Project
-          </button>
-        )}
+            <option value="name">Sort: Name</option>
+            <option value="created_at">Sort: Created</option>
+            <option value="members">Sort: Members</option>
+          </select>
+          <select
+            className="form-select form-select-sm"
+            value={sortDir}
+            onChange={(e)=>setSortDir(e.target.value)}
+            title="Direction"
+          >
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+
+          {canCreateProject && (
+            <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
+              + New Project
+            </button>
+          )}
+        </div>
       </div>
 
       {err && <div className="alert alert-danger">{err}</div>}
       {loading ? (
         <div>Loading…</div>
-      ) : projects.length === 0 ? (
+      ) : sortedProjects.length === 0 ? (
         <div className="text-muted">No projects to show.</div>
       ) : (
         <div className="row g-3">
-          {projects.map(p => (
+          {sortedProjects.map(p => (
             <div key={p.id} className="col-12 col-md-6 col-lg-4">
               <div className="card shadow-sm border-0 h-100">
                 <div className="card-body d-flex flex-column">
@@ -274,7 +316,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Add Members Modal (existing) */}
+      {/* Add Members Modal */}
       {selectProject && (
         <div
           className="modal fade show"
@@ -337,8 +379,8 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* === CREATE PROJECT MODAL === */}
-      {showCreate && (                                                     /* CHANGE */
+      {/* CREATE PROJECT MODAL */}
+      {showCreate && (
         <div
           className="modal fade show"
           style={{ display: "block", background: "rgba(0,0,0,0.35)" }}
@@ -373,7 +415,6 @@ export default function ProjectsPage() {
                   />
                 </div>
 
-                {/* Optional: pre‑attach members right away */}
                 <div className="mb-2">
                   <label className="form-label fw-semibold">Add members (optional)</label>
                   {createUsersLoading ? (
@@ -427,7 +468,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {(selectProject || showCreate) && <div className="modal-backdrop fade show" />} {/* CHANGE */}
+      {(selectProject || showCreate) && <div className="modal-backdrop fade show" />}
     </div>
   );
 }
