@@ -52,20 +52,22 @@ export default function AnalyticsPage() {
 
         if (cancelled) return;
 
-        
         if (st.status === "fulfilled") setStats(st.value.data);
-        
-        if (tk.status === "fulfilled") {
-          const arr = Array.isArray(tk.value.data) ? tk.value.data : (tk.value.data?.data || []);
-          setTasks(arr);
-        }
-        
-        if (pe.status === "fulfilled") setTimeEntries(pe.value.data || []);
-        
-        if (pr.status === "fulfilled") setHoursReport(pr.value.data || []);
 
-        const projItems = Array.isArray(pj.data) ? pj.data : (pj.data?.data || []);
-        setProjects(projItems);
+        if (tk.status === "fulfilled") {
+          setTasks(toArray(tk.value.data));
+        }
+
+        if (pe.status === "fulfilled") {
+          setTimeEntries(toArray(pe.value.data));
+        }
+
+        if (pr.status === "fulfilled") {
+          setHoursReport(toArray(pr.value.data));
+        }
+
+        setProjects(toArray(pj.data));
+
       } catch (e) {
         setErr(e?.response?.data?.message || "Failed to load analytics data.");
       } finally {
@@ -123,30 +125,31 @@ export default function AnalyticsPage() {
   }, [hoursReport, isEmployee, user]);
 
   const hoursByProjectForMe = useMemo(() => {
-    
-    if (!isEmployee && !isAdmin) return [];
-    const map = new Map();
-    for (const te of timeEntries) {
-      const pName = te.task?.project?.name || (te.task?.project_id ? `#${te.task.project_id}` : "N/A");
-      map.set(pName, (map.get(pName) || 0) + Number(te.hours || 0));
-    }
-    return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0, 12);
-  }, [timeEntries, isEmployee, isAdmin]);
+  if (!isEmployee && !isAdmin) return [];
+  const entries = Array.isArray(timeEntries) ? timeEntries : []; // ✅
+  const map = new Map();
+  for (const te of entries) {
+    const pName = te.task?.project?.name || (te.task?.project_id ? `#${te.task.project_id}` : "N/A");
+    map.set(pName, (map.get(pName) || 0) + Number(te.hours || 0));
+  }
+  return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0, 12);
+}, [timeEntries, isEmployee, isAdmin]);
 
-  const hoursTrendForMe = useMemo(() => {
-    
-    if (!isEmployee && !isAdmin) return [];
-    const map = new Map();
-    for (const te of timeEntries) {
-      const d = te.work_date; 
-      map.set(d, (map.get(d) || 0) + Number(te.hours || 0));
-    }
-    const arr = [...map.entries()]
-      .map(([d,h])=> [new Date(d), h])
-      .sort((a,b)=> a[0]-b[0])
-      .slice(-30); 
-    return arr;
-  }, [timeEntries, isEmployee, isAdmin]);
+const hoursTrendForMe = useMemo(() => {
+  if (!isEmployee && !isAdmin) return [];
+  const entries = Array.isArray(timeEntries) ? timeEntries : []; // ✅
+  const map = new Map();
+  for (const te of entries) {
+    const d = te.work_date;
+    map.set(d, (map.get(d) || 0) + Number(te.hours || 0));
+  }
+  const arr = [...map.entries()]
+    .map(([d,h])=> [new Date(d), h])
+    .sort((a,b)=> a[0]-b[0])
+    .slice(-30);
+  return arr;
+}, [timeEntries, isEmployee, isAdmin]);
+
 
   
   const palette = {
@@ -209,6 +212,12 @@ export default function AnalyticsPage() {
       tension: 0.25,
       pointRadius: 2
     }]
+  };
+
+  const toArray = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.data)) return payload.data;
+    return [];
   };
 
   

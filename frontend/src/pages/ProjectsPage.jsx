@@ -54,7 +54,8 @@ export default function ProjectsPage() {
       setLoading(true);
       setErr("");
       try {
-        const res = await api.get("/projects");
+        const res = await api.get("/projects", { params: { per_page: 'all' } });
+
         const items = Array.isArray(res.data) ? res.data : (res.data?.data || []);
         if (!cancelled) setProjects(items);
       } catch (e) {

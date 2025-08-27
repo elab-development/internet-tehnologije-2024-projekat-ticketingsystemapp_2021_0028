@@ -63,7 +63,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('tasks', TaskController::class);
 });
 
-Route::apiResource('time-entries', TimeEntryController::class)->middleware('auth:sanctum');
+
+
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('time-entries', TimeEntryController::class);
+    Route::get('/tasks/{task}/time-entries', [TimeEntryController::class, 'indexByTask']);
+});
+
 
 Route::apiResource('comments', CommentController::class)->middleware('auth:sanctum');
 

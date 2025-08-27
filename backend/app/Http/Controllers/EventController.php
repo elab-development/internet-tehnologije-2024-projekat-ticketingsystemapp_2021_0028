@@ -9,22 +9,32 @@ use Illuminate\Support\Facades\Auth;
 
 class EventController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
+        $perPage = (int) $request->input('per_page', 50);
+
+        $q = \App\Models\Event::with('project');
 
         if ($user->role === 'admin') {
-            return Event::with('project')->get();
+            return $q->orderBy('start_time')->paginate($perPage);
         }
 
         if ($user->role === 'manager') {
-            return Event::with('project')
-                ->whereHas('project', function ($query) use ($user) {
-                    $query->where('created_by', $user->id);
-                })->orWhere('user_id', $user->id)->get();
+            $q->whereHas('project', function ($qq) use ($user) {
+                $qq->where('created_by', $user->id)
+                ->orWhereHas('users', function ($q2) use ($user) {
+                    $q2->where('users.id', $user->id);
+                });
+            });
+            return $q->orderBy('start_time')->paginate($perPage);
         }
 
-        return Event::with('project')->where('user_id', $user->id)->get();
+        $q->whereHas('project.users', function ($qq) use ($user) {
+            $qq->where('users.id', $user->id);
+        });
+
+        return $q->orderBy('start_time')->paginate($perPage);
     }
 
     public function store(Request $request)
